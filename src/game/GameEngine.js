@@ -20,7 +20,7 @@ class GameEngine {
     // ── Room settings ──────────────────────────────────────────────
     this.winningScore = roomData.winningScore;
     this.mainTimerDuration = roomData.mainTimer;
-    this.retryTimerDuration = roomData.retryTimer;
+    this.retryTimerDuration = 5; // Always 5 seconds for retry
     this.difficulty = roomData.difficulty;
     this.hostId = roomData.hostId;
 
@@ -102,6 +102,23 @@ class GameEngine {
 
   transferHost(newHostId) {
     this.hostId = newHostId;
+  }
+
+  /**
+   * Initialize a player who joins mid-game.
+   * Gives them an answer state for the current question so they can participate immediately.
+   */
+  initializeNewPlayerMidGame(playerId) {
+    if (
+      this.state === GAME_STATES.QUESTION_ACTIVE ||
+      this.state === GAME_STATES.RETRY_ACTIVE
+    ) {
+      this.playerAnswerStates.set(playerId, {
+        usedOptions: new Set(),
+        locked: false,
+        answeredThisRound: false,
+      });
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════

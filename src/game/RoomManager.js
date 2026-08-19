@@ -116,8 +116,9 @@ class RoomManager {
       throw new Error('Room is no longer active');
     }
 
-    if (engine.state !== GAME_STATES.WAITING) {
-      throw new Error('Game has already started');
+    // Block joining if game is over
+    if (engine.state === GAME_STATES.GAME_OVER) {
+      throw new Error('Game has already ended');
     }
 
     if (engine.getPlayerCount() >= MAX_PLAYERS) {
@@ -133,6 +134,12 @@ class RoomManager {
 
     const playerId = uuidv4();
     engine.addPlayer(playerId, playerName, null);
+
+    // If game is in progress, initialize this player for the current question
+    const isGameInProgress = engine.state !== GAME_STATES.WAITING;
+    if (isGameInProgress) {
+      engine.initializeNewPlayerMidGame(playerId);
+    }
 
     // Persist to MongoDB
     await Room.updateOne(
@@ -153,7 +160,7 @@ class RoomManager {
       }
     );
 
-    return { playerId };
+    return { playerId, isGameInProgress };
   }
 
   /**
@@ -266,9 +273,6 @@ class RoomManager {
     }
     if (!MAIN_TIMERS.includes(settings.mainTimer)) {
       throw new Error('Invalid main timer value');
-    }
-    if (!RETRY_TIMERS.includes(settings.retryTimer)) {
-      throw new Error('Invalid retry timer value');
     }
     if (!DIFFICULTIES.includes(settings.difficulty)) {
       throw new Error('Invalid difficulty');

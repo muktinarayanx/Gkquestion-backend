@@ -95,7 +95,7 @@ module.exports = function registerRoomEvents(socket, io) {
       }
 
       // Regular join
-      const { playerId } = await roomManager.joinRoom(sanitize(playerName), code);
+      const { playerId, isGameInProgress } = await roomManager.joinRoom(sanitize(playerName), code);
 
       const eng = roomManager.getEngine(code);
       if (eng) eng.setPlayerSocket(playerId, socket.id);
@@ -112,31 +112,36 @@ module.exports = function registerRoomEvents(socket, io) {
         },
       });
 
-      // Send lobby state to the new player
-      cb({
-        success: true,
-        roomCode: code,
-        playerId,
-        players: eng.getPlayersArray(),
-        hostId: eng.hostId,
-        settings: {
-          winningScore: eng.winningScore,
-          mainTimer: eng.mainTimerDuration,
-          retryTimer: eng.retryTimerDuration,
-          difficulty: eng.difficulty,
-        },
-      });
+      if (isGameInProgress) {
+        // Mid-game join: send full game state so they jump right in
+        const state = eng.getFullStateForPlayer(playerId);
+        cb({
+          success: true,
+          roomCode: code,
+          playerId,
+          midGameJoin: true,
+          state,
+          players: eng.getPlayersArray(),
+          hostId: eng.hostId,
+          settings: eng._getSettings(),
+        });
+      } else {
+        // Normal lobby join
+        cb({
+          success: true,
+          roomCode: code,
+          playerId,
+          players: eng.getPlayersArray(),
+          hostId: eng.hostId,
+          settings: eng._getSettings(),
+        });
+      }
 
-      // Broadcast updated lobby to everyone
+      // Broadcast updated lobby/player list to everyone
       io.to(code).emit(SOCKET_EVENTS.LOBBY_UPDATED, {
         players: eng.getPlayersArray(),
         hostId: eng.hostId,
-        settings: {
-          winningScore: eng.winningScore,
-          mainTimer: eng.mainTimerDuration,
-          retryTimer: eng.retryTimerDuration,
-          difficulty: eng.difficulty,
-        },
+        settings: eng._getSettings(),
         state: eng.state,
       });
     } catch (err) {
