@@ -37,8 +37,7 @@ const roomSchema = new mongoose.Schema(
     },
     retryTimer: {
       type: Number,
-      required: true,
-      enum: [10, 15, 20, 30],
+      default: 5,
     },
     difficulty: {
       type: String,
