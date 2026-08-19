@@ -64,8 +64,6 @@ const roomSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Index for quick lookups
-roomSchema.index({ roomCode: 1 });
 // TTL index — MongoDB automatically deletes documents when expiresAt is reached
 roomSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
