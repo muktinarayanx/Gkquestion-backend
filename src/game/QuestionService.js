@@ -1,4 +1,5 @@
 const Question = require('../models/Question');
+const mongoose = require('mongoose');
 
 /**
  * QuestionService — fetches and prepares questions for a game session.
@@ -23,7 +24,7 @@ class QuestionService {
     // 'easy+moderate' → no difficulty filter, fetch both
 
     if (excludeIds.length > 0) {
-      filter._id = { $nin: excludeIds };
+      filter._id = { $nin: excludeIds.map(id => new mongoose.Types.ObjectId(id)) };
     }
 
     // Use MongoDB $sample aggregation for true random selection
