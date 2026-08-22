@@ -59,6 +59,7 @@ class RoomManager {
       mainTimer: settings.mainTimer,
       retryTimer: settings.retryTimer,
       difficulty: settings.difficulty,
+      negativePoints: settings.negativePoints || false,
       status: GAME_STATES.WAITING,
       players: [
         {
@@ -85,6 +86,7 @@ class RoomManager {
         mainTimer: settings.mainTimer,
         retryTimer: settings.retryTimer,
         difficulty: settings.difficulty,
+        negativePoints: settings.negativePoints || false,
       },
       this.io
     );

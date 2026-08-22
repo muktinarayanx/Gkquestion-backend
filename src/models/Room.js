@@ -44,6 +44,10 @@ const roomSchema = new mongoose.Schema(
       required: true,
       enum: ['easy', 'moderate', 'easy+moderate'],
     },
+    negativePoints: {
+      type: Boolean,
+      default: false,
+    },
     status: {
       type: String,
       default: 'WAITING',

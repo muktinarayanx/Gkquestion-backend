@@ -22,6 +22,7 @@ class GameEngine {
     this.mainTimerDuration = roomData.mainTimer;
     this.retryTimerDuration = 5; // Always 5 seconds for retry
     this.difficulty = roomData.difficulty;
+    this.negativePoints = roomData.negativePoints || false;
     this.hostId = roomData.hostId;
 
     // ── State ──────────────────────────────────────────────────────
@@ -305,9 +306,13 @@ class GameEngine {
 
     // ── WRONG ANSWER ──────────────────────────────────────────────
     player.wrongAnswers += 1;
+    
+    if (this.negativePoints) {
+      player.score -= 1;
+    }
 
-    // Lock player if they've exhausted all 4 options
-    if (answerState.usedOptions.size >= 4) {
+    // Lock player if they've exhausted all 4 options, or if negative points are enabled
+    if (this.negativePoints || answerState.usedOptions.size >= 4) {
       answerState.locked = true;
     }
 
@@ -686,6 +691,7 @@ class GameEngine {
       mainTimer: this.mainTimerDuration,
       retryTimer: this.retryTimerDuration,
       difficulty: this.difficulty,
+      negativePoints: this.negativePoints,
     };
   }
 
