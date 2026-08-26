@@ -75,6 +75,58 @@ module.exports = function registerGameEvents(socket, io) {
     }
   });
 
+  // ── SKIP_QUESTION ─────────────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.SKIP_QUESTION, (data, callback) => {
+    try {
+      const cb = typeof callback === 'function' ? callback : () => {};
+
+      if (!socket.playerData) return cb({ error: 'Not in a room' });
+      const { roomCode, playerId } = socket.playerData;
+
+      const engine = roomManager.getEngine(roomCode);
+      if (!engine) return cb({ error: 'Room not found' });
+
+      const result = engine.skipQuestion(playerId);
+
+      if (result.error) {
+        return cb({ error: result.error });
+      }
+
+      cb({ success: true });
+    } catch (err) {
+      const cb = typeof callback === 'function' ? callback : () => {};
+      cb({ error: err.message || 'Failed to skip question' });
+    }
+  });
+
+  // ── USE_LIFELINE ──────────────────────────────────────────────────
+  socket.on(SOCKET_EVENTS.USE_LIFELINE, (data, callback) => {
+    try {
+      const cb = typeof callback === 'function' ? callback : () => {};
+
+      if (!socket.playerData) return cb({ error: 'Not in a room' });
+      const { roomCode, playerId } = socket.playerData;
+
+      const engine = roomManager.getEngine(roomCode);
+      if (!engine) return cb({ error: 'Room not found' });
+
+      const result = engine.useLifeline(playerId);
+
+      if (result.error) {
+        return cb({ error: result.error });
+      }
+
+      cb({
+        success: true,
+        removedOptions: result.removedOptions,
+        lifelinesRemaining: result.lifelinesRemaining,
+      });
+    } catch (err) {
+      const cb = typeof callback === 'function' ? callback : () => {};
+      cb({ error: err.message || 'Failed to use lifeline' });
+    }
+  });
+
   // ── RESTART_GAME ──────────────────────────────────────────────────
   socket.on(SOCKET_EVENTS.RESTART_GAME, async (data, callback) => {
     try {

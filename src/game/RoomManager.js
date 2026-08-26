@@ -87,6 +87,7 @@ class RoomManager {
         retryTimer: settings.retryTimer,
         difficulty: settings.difficulty,
         negativePoints: settings.negativePoints || false,
+        lifelineCount: settings.lifelineCount || 0,
       },
       this.io
     );

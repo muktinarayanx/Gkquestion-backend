@@ -49,6 +49,8 @@ const SOCKET_EVENTS = {
   JOIN_ROOM: 'join_room',
   START_GAME: 'start_game',
   SUBMIT_ANSWER: 'submit_answer',
+  SKIP_QUESTION: 'skip_question',
+  USE_LIFELINE: 'use_lifeline',
   LEAVE_ROOM: 'leave_room',
   RESTART_GAME: 'restart_game',
 
@@ -62,6 +64,7 @@ const SOCKET_EVENTS = {
   TIMER_UPDATE: 'timer_update',
   ANSWER_RESULT: 'answer_result',
   PLAYER_ANSWERED: 'player_answered',
+  PLAYER_SKIPPED: 'player_skipped',
   PLAYER_LOCKED: 'player_locked',
   RETRY_STARTED: 'retry_started',
   QUESTION_RESULT: 'question_result',
@@ -70,6 +73,8 @@ const SOCKET_EVENTS = {
   HOST_CHANGED: 'host_changed',
   ROOM_CLOSED: 'room_closed',
   RECONNECTED: 'reconnected',
+  LIFELINE_ACTIVATED: 'lifeline_activated',
+  LIFELINE_DEACTIVATED: 'lifeline_deactivated',
   ERROR: 'error',
 };
 

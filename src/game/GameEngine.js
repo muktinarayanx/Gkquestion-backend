@@ -23,6 +23,7 @@ class GameEngine {
     this.retryTimerDuration = 5; // Always 5 seconds for retry
     this.difficulty = roomData.difficulty;
     this.negativePoints = roomData.negativePoints || false;
+    this.lifelineCount = roomData.lifelineCount || 0;
     this.hostId = roomData.hostId;
 
     // ── State ──────────────────────────────────────────────────────
@@ -39,10 +40,11 @@ class GameEngine {
     this.usedQuestionIds = [];
 
     // ── Per-question answer state ──────────────────────────────────
-    // playerId → { usedOptions: Set<number>, locked: boolean, answeredThisRound: boolean }
+    // playerId → { usedOptions: Set<number>, locked: boolean, answeredThisRound: boolean, skipped: boolean }
     this.playerAnswerStates = new Map();
     this.correctAnswerPlayerId = null;  // first correct player for current question
     this.isProcessingAnswer = false;    // concurrency guard
+    this.activeLifelinePlayerId = null; // playerId who is currently using 50-50
 
     // ── Timers ─────────────────────────────────────────────────────
     this.timerInterval = null;
@@ -63,6 +65,7 @@ class GameEngine {
       score: 0,
       correctAnswers: 0,
       wrongAnswers: 0,
+      lifelinesRemaining: this.lifelineCount,
       connected: true,
     });
   }
@@ -118,6 +121,7 @@ class GameEngine {
         usedOptions: new Set(),
         locked: false,
         answeredThisRound: false,
+        skipped: false,
       });
     }
   }
@@ -138,11 +142,12 @@ class GameEngine {
 
     this.state = GAME_STATES.STARTING;
 
-    // Reset all scores
+    // Reset all scores and lifelines
     for (const [, p] of this.players) {
       p.score = 0;
       p.correctAnswers = 0;
       p.wrongAnswers = 0;
+      p.lifelinesRemaining = this.lifelineCount;
     }
     this.questionNumber = 0;
     this.usedQuestionIds = [];
@@ -157,6 +162,7 @@ class GameEngine {
         mainTimer: this.mainTimerDuration,
         retryTimer: this.retryTimerDuration,
         difficulty: this.difficulty,
+        lifelineCount: this.lifelineCount,
       },
     });
 
@@ -195,6 +201,7 @@ class GameEngine {
           usedOptions: new Set(),
           locked: false,
           answeredThisRound: false,
+          skipped: false,
         });
       }
     }
@@ -231,6 +238,10 @@ class GameEngine {
       this.state !== GAME_STATES.RETRY_ACTIVE
     ) {
       return { error: 'Not accepting answers right now' };
+    }
+
+    if (this.activeLifelinePlayerId && this.activeLifelinePlayerId !== playerId) {
+      return { error: 'Another player is using a 50-50 lifeline' };
     }
 
     // ── Guard: valid option index ─────────────────────────────────
@@ -294,6 +305,11 @@ class GameEngine {
         correct: true,
       });
 
+      if (this.activeLifelinePlayerId === playerId) {
+        this.activeLifelinePlayerId = null;
+        this.broadcast(SOCKET_EVENTS.LIFELINE_DEACTIVATED, { playerId });
+      }
+
       // End the question
       this._endQuestion(true);
 
@@ -323,6 +339,11 @@ class GameEngine {
       correct: false,
     });
 
+    if (this.activeLifelinePlayerId === playerId) {
+      this.activeLifelinePlayerId = null;
+      this.broadcast(SOCKET_EVENTS.LIFELINE_DEACTIVATED, { playerId });
+    }
+
     // Check if all active players have answered this round
     // Use setImmediate to allow the return to complete first
     setImmediate(() => this.checkAllPlayersAnswered());
@@ -333,6 +354,98 @@ class GameEngine {
       usedOptions: Array.from(answerState.usedOptions),
       locked: answerState.locked,
     };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  SKIP & LIFELINE
+  // ═══════════════════════════════════════════════════════════════════
+
+  skipQuestion(playerId) {
+    if (
+      this.state !== GAME_STATES.QUESTION_ACTIVE &&
+      this.state !== GAME_STATES.RETRY_ACTIVE
+    ) {
+      return { error: 'Not accepting answers right now' };
+    }
+
+    if (this.activeLifelinePlayerId && this.activeLifelinePlayerId !== playerId) {
+      return { error: 'Another player is using a 50-50 lifeline' };
+    }
+
+    const player = this.players.get(playerId);
+    if (!player || !player.connected) {
+      return { error: 'Player not found or disconnected' };
+    }
+
+    const answerState = this.playerAnswerStates.get(playerId);
+    if (!answerState) return { error: 'You are not active in this round' };
+    if (answerState.locked) return { error: 'You are locked out of this question' };
+    if (answerState.answeredThisRound) return { error: 'You already answered this round' };
+    if (this.timerValue <= 0) return { error: 'Time is up' };
+    if (this.correctAnswerPlayerId) return { error: 'This question has already been answered correctly' };
+
+    answerState.answeredThisRound = true;
+    answerState.skipped = true;
+    answerState.locked = true; // They can't answer anymore in retries
+
+    if (this.activeLifelinePlayerId === playerId) {
+      this.activeLifelinePlayerId = null;
+      this.broadcast(SOCKET_EVENTS.LIFELINE_DEACTIVATED, { playerId });
+    }
+
+    this.broadcast(SOCKET_EVENTS.PLAYER_SKIPPED, {
+      playerId,
+      playerName: player.name,
+    });
+
+    setImmediate(() => this.checkAllPlayersAnswered());
+
+    return { success: true };
+  }
+
+  useLifeline(playerId) {
+    if (this.state !== GAME_STATES.QUESTION_ACTIVE) {
+      return { error: 'You can only use lifelines during the main question round' };
+    }
+
+    if (this.activeLifelinePlayerId) {
+      return { error: 'A lifeline is already active' };
+    }
+
+    const player = this.players.get(playerId);
+    if (!player || !player.connected) {
+      return { error: 'Player not found' };
+    }
+
+    if (player.lifelinesRemaining <= 0) {
+      return { error: 'No lifelines remaining' };
+    }
+
+    const answerState = this.playerAnswerStates.get(playerId);
+    if (!answerState) return { error: 'You are not active in this round' };
+    if (answerState.locked || answerState.answeredThisRound) {
+      return { error: 'You cannot use a lifeline after answering' };
+    }
+
+    player.lifelinesRemaining -= 1;
+    this.activeLifelinePlayerId = playerId;
+
+    // Pick 2 wrong options
+    const correctOpt = this.currentQuestion.correctAnswer;
+    const wrongOptions = [0, 1, 2, 3].filter(idx => idx !== correctOpt);
+    // Shuffle and pick 2
+    for (let i = wrongOptions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [wrongOptions[i], wrongOptions[j]] = [wrongOptions[j], wrongOptions[i]];
+    }
+    const removedOptions = wrongOptions.slice(0, 2);
+    
+    // Add them to used options so they count as disabled for this player
+    removedOptions.forEach(opt => answerState.usedOptions.add(opt));
+
+    this.broadcast(SOCKET_EVENTS.LIFELINE_ACTIVATED, { playerId, playerName: player.name });
+
+    return { success: true, removedOptions, lifelinesRemaining: player.lifelinesRemaining };
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -384,7 +497,7 @@ class GameEngine {
     this._clearTimer();
     this.state = GAME_STATES.RETRY_ACTIVE;
 
-    // Reset answeredThisRound for unlocked players
+    // Reset answeredThisRound for unlocked players (excluding skipped players, who are locked)
     for (const [, state] of this.playerAnswerStates) {
       if (!state.locked) {
         state.answeredThisRound = false;
@@ -467,6 +580,11 @@ class GameEngine {
       // but just in case, end the question as a success
       this._endQuestion(true);
     } else {
+      if (this.activeLifelinePlayerId) {
+        this.activeLifelinePlayerId = null;
+        this.broadcast(SOCKET_EVENTS.LIFELINE_DEACTIVATED, { timeout: true });
+      }
+
       // Check if we should retry or end
       const activePlayers = this._getActivePlayersForQuestion();
       const anyHasOptions = activePlayers.some((p) => {
@@ -478,7 +596,8 @@ class GameEngine {
       if (
         this.state === GAME_STATES.QUESTION_ACTIVE &&
         anyHasOptions &&
-        this._allActiveAnsweredThisRound()
+        this._allActiveAnsweredThisRound() &&
+        !this.correctAnswerPlayerId // Ensure no correct answer
       ) {
         this._startRetryRound();
       } else {
@@ -582,12 +701,14 @@ class GameEngine {
     this.playerAnswerStates.clear();
     this.correctAnswerPlayerId = null;
     this.isProcessingAnswer = false;
+    this.activeLifelinePlayerId = null;
 
-    // Reset player scores
+    // Reset player scores and lifelines
     for (const [, p] of this.players) {
       p.score = 0;
       p.correctAnswers = 0;
       p.wrongAnswers = 0;
+      p.lifelinesRemaining = this.lifelineCount;
     }
 
     // Broadcast lobby state
@@ -631,8 +752,10 @@ class GameEngine {
             usedOptions: Array.from(answerState.usedOptions),
             locked: answerState.locked,
             answeredThisRound: answerState.answeredThisRound,
+            skipped: answerState.skipped,
           }
         : null;
+      base.activeLifelinePlayerId = this.activeLifelinePlayerId;
     }
 
     if (this.state === GAME_STATES.GAME_OVER) {
@@ -681,6 +804,7 @@ class GameEngine {
         score: p.score,
         correctAnswers: p.correctAnswers,
         wrongAnswers: p.wrongAnswers,
+        lifelinesRemaining: p.lifelinesRemaining,
         connected: p.connected,
       }));
   }
@@ -692,6 +816,7 @@ class GameEngine {
       retryTimer: this.retryTimerDuration,
       difficulty: this.difficulty,
       negativePoints: this.negativePoints,
+      lifelineCount: this.lifelineCount,
     };
   }
 

@@ -42,6 +42,7 @@ module.exports = function registerRoomEvents(socket, io) {
           mainTimer: engine.mainTimerDuration,
           retryTimer: engine.retryTimerDuration,
           difficulty: engine.difficulty,
+          lifelineCount: engine.lifelineCount,
         },
       });
     } catch (err) {
@@ -197,6 +198,7 @@ module.exports = function registerRoomEvents(socket, io) {
               mainTimer: eng.mainTimerDuration,
               retryTimer: eng.retryTimerDuration,
               difficulty: eng.difficulty,
+              lifelineCount: eng.lifelineCount,
             },
             state: eng.state,
           });
@@ -255,6 +257,7 @@ module.exports = function registerRoomEvents(socket, io) {
           mainTimer: engine.mainTimerDuration,
           retryTimer: engine.retryTimerDuration,
           difficulty: engine.difficulty,
+          lifelineCount: engine.lifelineCount,
         },
         state: engine.state,
       });
