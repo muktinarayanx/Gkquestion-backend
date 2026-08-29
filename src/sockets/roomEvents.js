@@ -56,9 +56,7 @@ module.exports = function registerRoomEvents(socket, io) {
     try {
       const cb = typeof callback === 'function' ? callback : () => {};
       const { playerName, roomCode } = data || {};
-
-      const nameError = validatePlayerName(playerName);
-      if (nameError) return cb({ error: nameError });
+      const reconnectPlayerId = data?.playerId;
 
       const codeError = validateRoomCode(roomCode);
       if (codeError) return cb({ error: codeError });
@@ -67,18 +65,18 @@ module.exports = function registerRoomEvents(socket, io) {
 
       // Check if this socket is trying to reconnect
       const engine = roomManager.getEngine(code);
-      if (engine && data.playerId) {
-        const existingPlayer = engine.getPlayer(data.playerId);
-        if (existingPlayer && !existingPlayer.connected) {
+      if (engine && reconnectPlayerId) {
+        const existingPlayer = engine.getPlayer(reconnectPlayerId);
+        if (existingPlayer) {
           // Reconnection
-          const state = roomManager.reconnectPlayer(code, data.playerId, socket.id);
+          const state = roomManager.reconnectPlayer(code, reconnectPlayerId, socket.id);
           socket.join(code);
-          socket.playerData = { roomCode: code, playerId: data.playerId };
+          socket.playerData = { roomCode: code, playerId: reconnectPlayerId };
 
           // Notify others
           socket.to(code).emit(SOCKET_EVENTS.PLAYER_JOINED, {
             player: {
-              playerId: data.playerId,
+              playerId: reconnectPlayerId,
               name: existingPlayer.name,
               connected: true,
             },
@@ -88,7 +86,7 @@ module.exports = function registerRoomEvents(socket, io) {
           return cb({
             success: true,
             roomCode: code,
-            playerId: data.playerId,
+            playerId: reconnectPlayerId,
             reconnected: true,
             state,
           });
@@ -96,6 +94,9 @@ module.exports = function registerRoomEvents(socket, io) {
       }
 
       // Regular join
+      const nameError = validatePlayerName(playerName);
+      if (nameError) return cb({ error: nameError });
+
       const { playerId, isGameInProgress } = await roomManager.joinRoom(sanitize(playerName), code);
 
       const eng = roomManager.getEngine(code);

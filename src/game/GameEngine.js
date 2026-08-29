@@ -73,6 +73,14 @@ class GameEngine {
   removePlayer(playerId) {
     this.players.delete(playerId);
     this.playerAnswerStates.delete(playerId);
+    
+    // Check if we need to progress the game because the removed player was the last one we were waiting for
+    if (
+      this.state === GAME_STATES.QUESTION_ACTIVE ||
+      this.state === GAME_STATES.RETRY_ACTIVE
+    ) {
+      this.checkAllPlayersAnswered();
+    }
   }
 
   getPlayer(playerId) {
@@ -736,7 +744,8 @@ class GameEngine {
 
     if (
       this.state === GAME_STATES.QUESTION_ACTIVE ||
-      this.state === GAME_STATES.RETRY_ACTIVE
+      this.state === GAME_STATES.RETRY_ACTIVE ||
+      this.state === GAME_STATES.QUESTION_RESULT
     ) {
       const clientQuestion = QuestionService.sanitizeForClient(this.currentQuestion);
       const answerState = this.playerAnswerStates.get(playerId);
@@ -756,6 +765,22 @@ class GameEngine {
           }
         : null;
       base.activeLifelinePlayerId = this.activeLifelinePlayerId;
+
+      if (this.state === GAME_STATES.QUESTION_RESULT) {
+        const correctOption = this.currentQuestion.correctAnswer;
+        const correctText = this.currentQuestion.options[correctOption];
+        const winnerId = this.correctAnswerPlayerId;
+        const winner = winnerId ? this.players.get(winnerId) : null;
+        
+        base.questionResult = {
+          correctAnswerIndex: correctOption,
+          correctAnswerText: correctText,
+          pointAwarded: !!winnerId,
+          winnerId: winnerId || null,
+          winnerName: winner ? winner.name : null,
+          scores: base.scores,
+        };
+      }
     }
 
     if (this.state === GAME_STATES.GAME_OVER) {
